@@ -1,0 +1,49 @@
+from flask import Flask, render_template, request, send_file
+from gtts import gTTS
+from pydub import AudioSegment
+import os
+import uuid
+
+app = Flask(__name__)
+
+# Folder to save audio files
+OUTPUT_DIR = "output"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Optional: folder for background music
+MUSIC_DIR = "static/music"
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        text = request.form.get("script")
+        audio_name = request.form.get("audio_name")
+        music_file = request.form.get("music")
+
+        if not text or not audio_name:
+            return "Please enter script and audio name!"
+
+        # Generate TTS
+        tts = gTTS(text=text, lang="en")
+        tts_path = os.path.join(OUTPUT_DIR, f"{audio_name}.mp3")
+        tts.save(tts_path)
+
+        # Merge background music if selected
+        if music_file:
+            music_path = os.path.join(MUSIC_DIR, music_file)
+            if os.path.exists(music_path):
+                tts_audio = AudioSegment.from_file(tts_path)
+                bg_music = AudioSegment.from_file(music_path)
+                bg_music = bg_music - 10 # reduce volume
+                combined = bg_music.overlay(tts_audio)
+                combined.export(tts_path, format="mp3")
+
+        return send_file(tts_path, as_attachment=True)
+
+    # GET request
+    music_files = os.listdir(MUSIC_DIR) if os.path.exists(MUSIC_DIR) else []
+    return render_template("index.html", music_files=music_files)
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
